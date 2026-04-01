@@ -83,6 +83,7 @@
   .kpi-rs::before { background: var(--midnight-violet); }
   .kpi-foto::before { background: #94A3B8; }
   .kpi-pvp::before { background: #64748B; }
+  .kpi-sf::before { background: var(--lightsteel-blue); }
   .kpi-label {
     font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.8px;
   }
@@ -96,6 +97,7 @@
   .kpi-rs .kpi-value { color: var(--midnight-violet); }
   .kpi-foto .kpi-value { color: #94A3B8; }
   .kpi-pvp .kpi-value { color: #64748B; }
+  .kpi-sf .kpi-value { color: var(--midnight-violet); }
   .kpi-sub { font-size:12px; color:var(--muted); }
   .filtros-bar {
     display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;
@@ -248,6 +250,11 @@
       <div class="kpi-label">PVP físico</div>
       <div class="kpi-value" id="kpi-pvp">0</div>
       <div class="kpi-sub">filas con dato en la selección</div>
+    </div>
+    <div class="card kpi-card kpi-sf">
+      <div class="kpi-label">Sin fecha</div>
+      <div class="kpi-value" id="kpi-sin-fecha">0</div>
+      <div class="kpi-sub">filas sin fecha en la selección</div>
     </div>
   </div>
 
@@ -522,11 +529,11 @@ function cargarExcel(file) {
 }
 
 function limpiarArchivo() {
-  DATOS_BASE = normalizarDatasetEmbebido(DATOS_INICIALES);
+  DATOS_BASE = [];
   localStorage.removeItem(STORAGE_KEY);
   document.getElementById('input-excel').value = '';
-  document.getElementById('estado-carga').textContent = 'Mostrando datos embebidos en el HTML.';
-  document.getElementById('fuente-actual').textContent = 'Datos embebidos / Excel cargado';
+  document.getElementById('estado-carga').textContent = 'No hay archivo cargado. El tablero quedó limpio.';
+  document.getElementById('fuente-actual').textContent = 'Sin archivo cargado';
   mesSeleccionadoDesdeGrafico = null;
   poblarFiltros();
   renderTodo();
@@ -548,9 +555,13 @@ function getDatosFiltrados() {
   });
 }
 
+function getDatosConFecha(datos) {
+  return (datos || []).filter(r => r && r.mes_label && r.mes_label !== 'Sin fecha' && r.dia && r.dia !== 'Sin fecha');
+}
+
 function poblarFiltros() {
   const tipos = [...new Set(DATOS_BASE.map(r => r.Tipo).filter(Boolean))].sort();
-  const meses = [...new Set(DATOS_BASE.map(r => r.mes_label).filter(Boolean))].sort();
+  const meses = [...new Set(DATOS_BASE.map(r => r.mes_label).filter(m => m && m !== 'Sin fecha'))].sort();
 
   const selTipo = document.getElementById('sel-tipo');
   const selMes = document.getElementById('sel-mes-top');
@@ -583,6 +594,7 @@ function actualizarKPIs(datos) {
   const rs = datos.filter(x => textoNoVacio(x.rs_fisico)).length;
   const foto = datos.filter(x => textoNoVacio(x.foto_fisico)).length;
   const pvp = datos.filter(x => textoNoVacio(x.pvp_fisico)).length;
+  const sinFecha = datos.filter(x => !x.mes_label || x.mes_label === 'Sin fecha' || !x.dia || x.dia === 'Sin fecha').length;
 
   document.getElementById('kpi-total').textContent = total.toLocaleString('es-EC');
   document.getElementById('kpi-nuevo').textContent = nuevos.toLocaleString('es-EC');
@@ -591,6 +603,7 @@ function actualizarKPIs(datos) {
   document.getElementById('kpi-rs').textContent = rs.toLocaleString('es-EC');
   document.getElementById('kpi-foto').textContent = foto.toLocaleString('es-EC');
   document.getElementById('kpi-pvp').textContent = pvp.toLocaleString('es-EC');
+  document.getElementById('kpi-sin-fecha').textContent = sinFecha.toLocaleString('es-EC');
 }
 
 function esTabletOMovil() {
@@ -635,6 +648,7 @@ function plotLayout(tituloY='Cantidad') {
 }
 
 function renderGrafMensual(datos) {
+  datos = getDatosConFecha(datos);
   const meses = [...new Set(datos.map(x => x.mes_label))].sort();
   const labels = meses.map(m => datos.find(x => x.mes_label === m)?.mes_display || m);
   const conteo = meses.map(m => datos.filter(x => x.mes_label === m).length);
@@ -648,6 +662,7 @@ function renderGrafMensual(datos) {
     textposition: 'outside',
     hovertemplate: '%{x}<br>Total: %{y}<extra></extra>'
   };
+  if (!datos.length) { Plotly.newPlot('graf-mensual', [], Object.assign(plotLayout('Productos'), {annotations:[{text:'Sin datos con fecha',xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,font:{size:16,color:'#6B7280'}}]}), {responsive:true, displayModeBar:false}); return; }
   Plotly.newPlot('graf-mensual', [trace], plotLayout('Productos'), {responsive:true, displayModeBar:false});
 
   const el = document.getElementById('graf-mensual');
@@ -663,10 +678,13 @@ function renderGrafMensual(datos) {
 }
 
 function renderGrafTipos(datos) {
+  datos = getDatosConFecha(datos);
   const meses = [...new Set(datos.map(x => x.mes_label))].sort();
   const labels = meses.map(m => datos.find(x => x.mes_label === m)?.mes_display || m);
   const nuevos = meses.map(m => datos.filter(x => x.mes_label === m && normalizarClave(x.Tipo) === 'nuevo').length);
   const actual = meses.map(m => datos.filter(x => x.mes_label === m && normalizarClave(x.Tipo) === 'actualizacion').length);
+
+  if (!datos.length) { Plotly.newPlot('graf-tipos', [], Object.assign(plotLayout('Productos'), {annotations:[{text:'Sin datos con fecha',xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,font:{size:16,color:'#6B7280'}}]}), {responsive:true, displayModeBar:false}); return; }
 
   const traces = [
     { x: labels, y: nuevos, type: 'bar', name: 'Nuevo', marker: { color: C_TOMATO }, text: nuevos, textposition:'outside' },
@@ -679,6 +697,8 @@ function renderGrafTipos(datos) {
 }
 
 function renderGrafDiario(datos) {
+  datos = getDatosConFecha(datos);
+  if (!datos.length) { const layout = plotLayout('Productos'); layout.height = alturaGrafico('diario'); layout.annotations=[{text:'Sin datos con fecha',xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,font:{size:16,color:'#6B7280'}}]; Plotly.newPlot('graf-diario', [], layout, {responsive:true, displayModeBar:false}); return; }
   const dias = [...new Set(datos.map(x => x.dia).filter(x => x && x !== 'Sin fecha'))].sort();
   const conteo = dias.map(d => datos.filter(x => x.dia === d).length);
   const fechasValidas = dias.map(parseFecha).filter(Boolean);
@@ -745,6 +765,7 @@ function renderGrafDiario(datos) {
 }
 
 function renderGrafCamposMensual(datos) {
+  datos = getDatosConFecha(datos);
   const meses = [...new Set(datos.map(x => x.mes_label))].sort();
   const labels = meses.map(m => datos.find(x => x.mes_label === m)?.mes_display || m);
 
@@ -752,6 +773,8 @@ function renderGrafCamposMensual(datos) {
   const rs = meses.map(m => datos.filter(x => x.mes_label === m && textoNoVacio(x.rs_fisico)).length);
   const foto = meses.map(m => datos.filter(x => x.mes_label === m && textoNoVacio(x.foto_fisico)).length);
   const pvp = meses.map(m => datos.filter(x => x.mes_label === m && textoNoVacio(x.pvp_fisico)).length);
+
+  if (!datos.length) { Plotly.newPlot('graf-campos-mensual', [], Object.assign(plotLayout('Actualizaciones'), {annotations:[{text:'Sin datos con fecha',xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,font:{size:16,color:'#6B7280'}}]}), {responsive:true, displayModeBar:false}); return; }
 
   const traces = [
     { x: labels, y: cb, type:'bar', name:'Código de barra físico', marker: { color: C_TOMATO }, text: cb, textposition:'outside' },
@@ -766,6 +789,7 @@ function renderGrafCamposMensual(datos) {
 }
 
 function renderGrafTotalFisicos(datos) {
+  datos = getDatosConFecha(datos);
   const meses = [...new Set(datos.map(x => x.mes_label))].sort();
   const labels = meses.map(m => datos.find(x => x.mes_label === m)?.mes_display || m);
   const total = meses.map(m => {
@@ -775,6 +799,8 @@ function renderGrafTotalFisicos(datos) {
            enMes.filter(x => textoNoVacio(x.foto_fisico)).length +
            enMes.filter(x => textoNoVacio(x.pvp_fisico)).length;
   });
+
+  if (!datos.length) { Plotly.newPlot('graf-total-fisicos', [], Object.assign(plotLayout('Actualizaciones'), {annotations:[{text:'Sin datos con fecha',xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,font:{size:16,color:'#6B7280'}}]}), {responsive:true, displayModeBar:false}); return; }
 
   const trace = {
     x: labels,
